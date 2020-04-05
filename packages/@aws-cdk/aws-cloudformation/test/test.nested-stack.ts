@@ -1,4 +1,4 @@
-import { expect, haveResource, SynthUtils } from '@aws-cdk/assert';
+import { expect, haveResource, matchTemplate, SynthUtils } from '@aws-cdk/assert';
 import * as s3_assets from '@aws-cdk/aws-s3-assets';
 import * as sns from '@aws-cdk/aws-sns';
 import { App, CfnParameter, CfnResource, Construct, ContextProvider, Stack } from '@aws-cdk/core';
@@ -29,7 +29,8 @@ export = {
 
   'can be defined as a direct child or an indirect child of a Stack'(test: Test) {
     // GIVEN
-    const parent = new Stack();
+    const app = new App();
+    const parent = new Stack(app, 'stack');
 
     // THEN
     new NestedStack(parent, 'direct');
@@ -205,7 +206,8 @@ export = {
       }
     }
 
-    const parent = new Stack();
+    const app = new App();
+    const parent = new Stack(app, 'stack');
     const nested = new MyNestedStack(parent, 'nested');
 
     test.ok(nested.stackOfChild === nested);
@@ -566,7 +568,8 @@ export = {
 
   'stackId returns AWS::StackId when referenced from the context of the nested stack'(test: Test) {
     // GIVEN
-    const parent = new Stack();
+    const app = new App();
+    const parent = new Stack(app, 'stack');
     const nested = new NestedStack(parent, 'NestedStack');
 
     // WHEN
@@ -585,7 +588,8 @@ export = {
 
   'stackId returns the REF of the CloudFormation::Stack resource when referenced from the parent stack'(test: Test) {
     // GIVEN
-    const parent = new Stack();
+    const app = new App();
+    const parent = new Stack(app, 'stack');
     const nested = new NestedStack(parent, 'NestedStack');
 
     // WHEN
@@ -604,7 +608,8 @@ export = {
 
   'stackName returns AWS::StackName when referenced from the context of the nested stack'(test: Test) {
     // GIVEN
-    const parent = new Stack();
+    const app = new App();
+    const parent = new Stack(app, 'stack');
     const nested = new NestedStack(parent, 'NestedStack');
 
     // WHEN
@@ -623,7 +628,8 @@ export = {
 
   'stackName returns the REF of the CloudFormation::Stack resource when referenced from the parent stack'(test: Test) {
     // GIVEN
-    const parent = new Stack();
+    const app = new App();
+    const parent = new Stack(app, 'stack');
     const nested = new NestedStack(parent, 'NestedStack');
 
     // WHEN
@@ -841,7 +847,8 @@ export = {
 
   'referencing attributes with period across stacks'(test: Test) {
     // GIVEN
-    const parent = new Stack();
+    const app = new App();
+    const parent = new Stack(app, 'stack');
     const nested = new NestedStack(parent, 'nested');
     const consumed = new CfnResource(nested, 'resource-in-nested', { type: 'CONSUMED' });
 
@@ -861,7 +868,7 @@ export = {
         }
       },
       Outputs: {
-        nestedresourceinnested59B1F01CConsumedAttribute: {
+        stacknestedresourceinnested8646DE1FConsumedAttribute: {
           Value: {
             "Fn::GetAtt": [
               "resourceinnested",
@@ -875,7 +882,7 @@ export = {
       ConsumedAttribute: {
         "Fn::GetAtt": [
           "nestedNestedStacknestedNestedStackResource3DD143BF",
-          "Outputs.nestedresourceinnested59B1F01CConsumedAttribute"
+          "Outputs.stacknestedresourceinnested8646DE1FConsumedAttribute"
         ]
       }
     }));
@@ -909,4 +916,61 @@ export = {
 
     test.done();
   },
+
+  'references to a resource from a deeply nested stack'(test: Test) {
+    // GIVEN
+    const app = new App();
+    const top = new Stack(app, 'stack');
+    const topLevel = new CfnResource(top, 'toplevel', { type: 'TopLevel' });
+    const nested1 = new NestedStack(top, 'nested1');
+    const nested2 = new NestedStack(nested1, 'nested2');
+
+    // WHEN
+    new CfnResource(nested2, 'refToTopLevel', {
+      type: 'BottomLevel',
+      properties: { RefToTopLevel: topLevel.ref }
+    });
+
+    // THEN
+    expect(top).to(haveResource('AWS::CloudFormation::Stack', {
+      Parameters: {
+        referencetostacktoplevelBB16BF13Ref: {
+          Ref: "toplevel"
+        },
+        referencetostackAssetParameters842982bd421cce9742ba27151ef12ed699d44d22801f41e8029f63f2358a3f2fS3Bucket5DA5D2E7Ref: {
+          Ref: "AssetParameters842982bd421cce9742ba27151ef12ed699d44d22801f41e8029f63f2358a3f2fS3BucketDD4D96B5"
+        },
+        referencetostackAssetParameters842982bd421cce9742ba27151ef12ed699d44d22801f41e8029f63f2358a3f2fS3VersionKey8FBE5C12Ref: {
+          Ref: "AssetParameters842982bd421cce9742ba27151ef12ed699d44d22801f41e8029f63f2358a3f2fS3VersionKey83E381F3"
+        }
+      }
+    }));
+
+    expect(nested1).to(haveResource('AWS::CloudFormation::Stack', {
+      Parameters: {
+        referencetostacktoplevelBB16BF13Ref: {
+          Ref: "referencetostacktoplevelBB16BF13Ref"
+        }
+      }
+    }));
+
+    expect(nested2).to(matchTemplate({
+      Resources: {
+        refToTopLevel: {
+          Type: "BottomLevel",
+          Properties: {
+            RefToTopLevel: {
+              Ref: "referencetostacktoplevelBB16BF13Ref"
+            }
+          }
+        }
+      },
+      Parameters: {
+        referencetostacktoplevelBB16BF13Ref: {
+          Type: "String"
+        },
+      },
+    }));
+    test.done();
+  }
 };

@@ -9,7 +9,7 @@ import { Environment } from './environment';
 import { FileAssetParameters } from './private/asset-parameters';
 import { CLOUDFORMATION_TOKEN_RESOLVER, CloudFormationLang } from './private/cloudformation-lang';
 import { LogicalIDs } from './private/logical-id';
-import { findTokens , resolve } from './private/resolve';
+import { resolve } from './private/resolve';
 import { makeUniqueId } from './private/uniqueid';
 
 const STACK_SYMBOL = Symbol.for('@aws-cdk/core.Stack');
@@ -744,36 +744,6 @@ export class Stack extends Construct implements ITaggable {
    * Find all dependencies as well and add the appropriate DependsOn fields.
    */
   protected prepare() {
-    const tokens = this.findTokens();
-
-    // References (originating from this stack)
-    for (const reference of tokens) {
-
-      // skip if this is not a CfnReference
-      if (!CfnReference.isCfnReference(reference)) {
-        continue;
-      }
-
-      const targetStack = Stack.of(reference.target);
-
-      // skip if this is not a cross-stack reference
-      if (targetStack === this) {
-        continue;
-      }
-
-      // determine which stack should create the cross reference
-      const factory = this.determineCrossReferenceFactory(targetStack);
-
-      // if one side is a nested stack (has "parentStack"), we let it create the reference
-      // since it has more knowledge about the world.
-      const consumedValue = factory.prepareCrossReference(this, reference);
-
-      // if the reference has already been assigned a value for the consuming stack, carry on.
-      if (!reference.hasValueForStack(this)) {
-        reference.assignValueForStack(this, consumedValue);
-      }
-    }
-
     // Resource dependencies
     for (const dependency of this.node.dependencies) {
       for (const target of findCfnResources([ dependency.target ])) {
@@ -787,20 +757,26 @@ export class Stack extends Construct implements ITaggable {
       this.node.addMetadata(cxapi.STACK_TAGS_METADATA_KEY, this.tags.renderTags());
     }
 
-    if (this.nestedStackParent) {
-      // add the nested stack template as an asset
-      const cfn = JSON.stringify(this._toCloudFormation());
-      const templateHash = crypto.createHash('sha256').update(cfn).digest('hex');
-      const parent = this.nestedStackParent;
-      const templateLocation = parent.addFileAsset({
-        packaging: FileAssetPackaging.FILE,
-        sourceHash: templateHash,
-        fileName: this.templateFile
-      });
+    const parent = this.nestedStackParent;
 
-      // if bucketName/objectKey are cfn parameters from a stack other than the parent stack, they will
-      // be resolved as cross-stack references like any other (see "multi" tests).
-      this._templateUrl = `https://s3.${parent.region}.${parent.urlSuffix}/${templateLocation.bucketName}/${templateLocation.objectKey}`;
+    if (parent) {
+      const app = this.node.root as App;
+      if (!(app instanceof App)) {
+        throw new Error(`expecting root to be an app`);
+      }
+
+      app._afterStabilize(() => JSON.stringify(this._toCloudFormation()), cfn => {
+        const templateHash = crypto.createHash('sha256').update(cfn).digest('hex');
+        const templateLocation = parent.addFileAsset({
+          packaging: FileAssetPackaging.FILE,
+          sourceHash: templateHash,
+          fileName: this.templateFile
+        });
+
+        // if bucketName/objectKey are cfn parameters from a stack other than the parent stack, they will
+        // be resolved as cross-stack references like any other (see "multi" tests).
+        this._templateUrl = `https://s3.${parent.region}.${parent.urlSuffix}/${templateLocation.bucketName}/${templateLocation.objectKey}`;
+      });
     }
   }
 
@@ -880,7 +856,7 @@ export class Stack extends Construct implements ITaggable {
       Metadata: this.templateOptions.metadata
     };
 
-    const elements = cfnElements(this);
+    const elements = CfnElement._findAll(this);
     const fragments = elements.map(e => this.resolve(e._toCloudFormation()));
 
     // merge in all CloudFormation fragments collected from the tree
@@ -1055,58 +1031,6 @@ export class Stack extends Construct implements ITaggable {
     }
     return this._assetParameters;
   }
-
-  private determineCrossReferenceFactory(target: Stack) {
-    // unsupported: stacks from different apps
-    if (target.node.root !== this.node.root) {
-      throw new Error(
-        `Cannot reference across apps. ` +
-        `Consuming and producing stacks must be defined within the same CDK app.`);
-    }
-
-    // unsupported: stacks are not in the same environment
-    if (target.environment !== this.environment) {
-      throw new Error(
-        `Stack "${this.node.path}" cannot consume a cross reference from stack "${target.node.path}". ` +
-        `Cross stack references are only supported for stacks deployed to the same environment or between nested stacks and their parent stack`);
-    }
-
-    // if one of the stacks is a nested stack, go ahead and give it the right to make the cross reference
-    if (target.nested) { return target; }
-    if (this.nested) { return this; }
-
-    // both stacks are top-level (non-nested), the taret (producing stack) gets to make the reference
-    return target;
-  }
-
-  /**
-   * Returns all the tokens used within the scope of the current stack.
-   */
-  private findTokens() {
-    const tokens = new Array<IResolvable>();
-
-    for (const element of cfnElements(this)) {
-      try {
-        tokens.push(...findTokens(element, () => element._toCloudFormation()));
-      }  catch (e) {
-        // Note: it might be that the properties of the CFN object aren't valid.
-        // This will usually be preventatively caught in a construct's validate()
-        // and turned into a nicely descriptive error, but we're running prepare()
-        // before validate(). Swallow errors that occur because the CFN layer
-        // doesn't validate completely.
-        //
-        // This does make the assumption that the error will not be rectified,
-        // but the error will be thrown later on anyway. If the error doesn't
-        // get thrown down the line, we may miss references.
-        if (e.type === 'CfnSynthesisError') {
-          continue;
-        }
-
-        throw e;
-      }
-    }
-    return tokens;
-  }
 }
 
 function merge(template: any, part: any) {
@@ -1162,29 +1086,8 @@ export interface ITemplateOptions {
    metadata?: { [key: string]: any };
 }
 
-/**
- * Collect all CfnElements from a Stack
- *
- * @param node Root node to collect all CfnElements from
- * @param into Array to append CfnElements to
- * @returns The same array as is being collected into
- */
-function cfnElements(node: IConstruct, into: CfnElement[] = []): CfnElement[] {
-  if (CfnElement.isCfnElement(node)) {
-    into.push(node);
-  }
-
-  for (const child of node.node.children) {
-    // Don't recurse into a substack
-    if (Stack.isStack(child)) { continue; }
-
-    cfnElements(child, into);
-  }
-
-  return into;
-}
-
 // These imports have to be at the end to prevent circular imports
+import { App } from './app';
 import { Arn, ArnComponents } from './arn';
 import { CfnElement } from './cfn-element';
 import { Fn } from './cfn-fn';
@@ -1193,7 +1096,6 @@ import { Aws, ScopedAws } from './cfn-pseudo';
 import { CfnResource, TagType } from './cfn-resource';
 import { addDependency } from './deps';
 import { Lazy } from './lazy';
-import { CfnReference } from './private/cfn-reference';
 import { Intrinsic } from './private/intrinsic';
 import { Reference } from './reference';
 import { IResolvable } from './resolvable';

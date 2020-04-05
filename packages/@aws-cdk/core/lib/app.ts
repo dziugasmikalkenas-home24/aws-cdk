@@ -1,5 +1,6 @@
 import * as cxapi from '@aws-cdk/cx-api';
 import { Construct, ConstructNode } from './construct-compat';
+import { prepareReferences } from './private/refs';
 import { collectRuntimeInformation } from './private/runtime-info';
 import { TreeMetadata } from './private/tree-metadata';
 
@@ -89,6 +90,12 @@ export class App extends Construct {
   private _assembly?: cxapi.CloudAssembly;
   private readonly runtimeInfo: boolean;
   private readonly outdir?: string;
+  private readonly afterStabilizeRequests = new Array<{
+    readonly snapshot: () => string;
+    readonly handler: (result: string) => void;
+    result?: string;
+    completed?: boolean;
+  }>();
 
   /**
    * Initializes a CDK application.
@@ -145,6 +152,47 @@ export class App extends Construct {
 
     this._assembly = assembly;
     return assembly;
+  }
+
+  /**
+   * Invokes `handler()` when `snapshot()` returns the same value in two subsequent
+   * invocations after references and depenencies are resolved.
+   *
+   * @internal
+   */
+  public _afterStabilize(snapshot: () => string, handler: (result: string) => void) {
+    this.afterStabilizeRequests.push({ snapshot, handler });
+  }
+
+  protected prepare() {
+    super.prepare();
+
+    let done = false;
+    while (!done) {
+      prepareReferences(this);
+
+      done = true;
+      for (const req of this.afterStabilizeRequests) {
+        if (req.completed) {
+          continue;
+        }
+
+        done = false;
+
+        const newResult = req.snapshot();
+        if (!newResult) {
+          throw new Error(`snapshot must return a result`);
+        }
+
+        // if new result is the same as previous result, invoke handler and mark as completed.
+        if (req.result === newResult) {
+          req.handler(newResult);
+          req.completed = true;
+        } else {
+          req.result = newResult;
+        }
+      }
+    }
   }
 
   private loadContext(defaults: { [key: string]: string } = { }) {

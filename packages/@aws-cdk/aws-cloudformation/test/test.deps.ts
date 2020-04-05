@@ -31,7 +31,8 @@ export = {
 
     'resource in nested stack depends on a resource in the parent stack': matrixForResourceDependencyTest((test, addDep) => {
       // GIVEN
-      const parent = new Stack(undefined, 'root');
+      const app = new App();
+      const parent = new Stack(app, 'root');
       const nested = new NestedStack(parent, 'Nested');
       const resourceInParent = new CfnResource(parent, 'ResourceInParent', { type: 'PARENT' });
       const resourceInNested = new CfnResource(nested, 'ResourceInNested', { type: 'NESTED' });
@@ -49,7 +50,8 @@ export = {
 
     'resource in nested stack depends on a resource in a grandparent stack': matrixForResourceDependencyTest((test, addDep) => {
       // GIVEN
-      const grantparent = new Stack(undefined, 'Grandparent');
+      const app = new App();
+      const grantparent = new Stack(app, 'Grandparent');
       const parent = new NestedStack(grantparent, 'Parent');
       const nested = new NestedStack(parent, 'Nested');
       const resourceInGrandparent = new CfnResource(grantparent, 'ResourceInGrandparent', { type: 'GRANDPARENT' });
@@ -67,7 +69,8 @@ export = {
 
     'resource in parent stack depends on resource in nested stack': matrixForResourceDependencyTest((test, addDep) => {
       // GIVEN
-      const parent = new Stack(undefined, 'root');
+      const app = new App();
+      const parent = new Stack(app, 'root');
       const nested = new NestedStack(parent, 'Nested');
       const resourceInParent = new CfnResource(parent, 'ResourceInParent', { type: 'PARENT' });
       const resourceInNested = new CfnResource(nested, 'ResourceInNested', { type: 'NESTED' });
@@ -84,7 +87,8 @@ export = {
 
   'resource in grantparent stack depends on resource in nested stack': matrixForResourceDependencyTest((test, addDep) => {
       // GIVEN
-      const grandparent = new Stack(undefined, 'Grandparent');
+      const app = new App();
+      const grandparent = new Stack(app, 'Grandparent');
       const parent = new NestedStack(grandparent, 'Parent');
       const nested = new NestedStack(parent, 'Nested');
       const resourceInGrandparent = new CfnResource(grandparent, 'ResourceInGrandparent', { type: 'GRANDPARENT' });
@@ -204,20 +208,22 @@ export = {
 
     'nested stack cannot depend on any of its parents'(test: Test) {
       // GIVEN
-      const root = new Stack();
+      const app = new App();
+      const root = new Stack(app, 'stack');
       const nested1 = new NestedStack(root, 'Nested1');
       const nested2 = new NestedStack(nested1, 'Nested2');
 
       // THEN
-      test.throws(() => nested1.addDependency(root), /Nested stack 'Nested1' cannot depend on a parent stack ''/);
-      test.throws(() => nested2.addDependency(nested1), /Nested stack 'Nested1\/Nested2' cannot depend on a parent stack 'Nested1'/);
-      test.throws(() => nested2.addDependency(root), /Nested stack 'Nested1\/Nested2' cannot depend on a parent stack ''/);
+      test.throws(() => nested1.addDependency(root), /Nested stack 'stack\/Nested1' cannot depend on a parent stack 'stack'/);
+      test.throws(() => nested2.addDependency(nested1), /Nested stack 'stack\/Nested1\/Nested2' cannot depend on a parent stack 'stack\/Nested1'/);
+      test.throws(() => nested2.addDependency(root), /Nested stack 'stack\/Nested1\/Nested2' cannot depend on a parent stack 'stack'/);
       test.done();
     },
 
     'any parent stack is by definition dependent on the nested stack so dependency is ignored'(test: Test) {
       // GIVEN
-      const root = new Stack();
+      const app = new App();
+      const root = new Stack(app, 'stack');
       const nested1 = new NestedStack(root, 'Nested1');
       const nested2 = new NestedStack(nested1, 'Nested2');
 
@@ -232,7 +238,8 @@ export = {
 
     'sibling nested stacks transfer to resources'(test: Test) {
       // GIVEN
-      const stack = new Stack();
+      const app = new App();
+      const stack = new Stack(app, 'stack');
       const nested1 = new NestedStack(stack, 'Nested1');
       const nested2 = new NestedStack(stack, 'Nested2');
 
@@ -248,7 +255,8 @@ export = {
 
     'nested stack depends on a deeply nested stack'(test: Test) {
       // GIVEN
-      const stack = new Stack();
+      const app = new App();
+      const stack = new Stack(app, 'stack');
       const nested1 = new NestedStack(stack, 'Nested1');
       const nested2 = new NestedStack(stack, 'Nested2');
       const nested21 = new NestedStack(nested2, 'Nested21');
@@ -265,7 +273,8 @@ export = {
 
     'deeply nested stack depends on a parent nested stack'(test: Test) {
       // GIVEN
-      const stack = new Stack();
+      const app = new App();
+      const stack = new Stack(app, 'stack');
       const nested1 = new NestedStack(stack, 'Nested1');
       const nested2 = new NestedStack(stack, 'Nested2');
       const nested21 = new NestedStack(nested2, 'Nested21');

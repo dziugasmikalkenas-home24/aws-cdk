@@ -149,9 +149,10 @@ export class NestedStack extends Stack {
   protected prepareCrossReference(sourceStack: Stack, reference: Reference): IResolvable {
     const targetStack = Stack.of(reference.target);
 
-    // the nested stack references a resource from the parent stack:
-    // we pass it through a as a cloudformation parameter
-    if (targetStack === sourceStack.nestedStackParent) {
+    // the nested stack references a resource from the parent stack (directly or indirectly):
+    // we add a parameter to our stack and assign it the value of the reference from the parent.
+    // if the source is not directly from the parent, this logic will also happen at the parent level (recursively).
+    if (sourceStack.nestedStackParent && isParentOfNestedStack(targetStack, sourceStack)) {
       // we call "this.resolve" to ensure that tokens do not creep in (for example, if the reference display name includes tokens)
       const paramId = this.resolve(`reference-to-${reference.target.node.uniqueId}.${reference.displayName}`);
       let param = this.node.tryFindChild(paramId) as CfnParameter;
@@ -229,4 +230,23 @@ function findParentStack(scope: Construct): Stack {
   }
 
   return parentStack as Stack;
+}
+
+/**
+ * @returns true if this stack is a direct or indirect parent of the nested
+ * stack `nested`. If `nested` is a top-level stack, returns false.
+ */
+export function isParentOfNestedStack(parent: Stack, child: Stack): boolean {
+  // if "nested" is not a nested stack, then by definition we cannot be its parent
+  if (!child.nestedStackParent) {
+    return false;
+  }
+
+  // if this is the direct parent, then we found it
+  if (parent === child.nestedStackParent) {
+    return true;
+  }
+
+  // traverse up
+  return isParentOfNestedStack(parent, child.nestedStackParent);
 }
