@@ -1,5 +1,6 @@
 import * as sns from '@aws-cdk/aws-sns';
-import { Aws, CfnOutput, CfnParameter, CfnResource, Construct, Duration, Fn, IResolvable, IResolveContext, Lazy, Reference, Stack, Token } from '@aws-cdk/core';
+import { Aws, CfnResource, Construct, Duration, Fn, IResolveContext, Stack, Token } from '@aws-cdk/core';
+import { Lazy } from 'constructs';
 import { CfnStack } from './cloudformation.generated';
 
 const NESTED_STACK_SYMBOL = Symbol.for('@aws-cdk/aws-cloudformation.NestedStack');
@@ -10,7 +11,6 @@ const NESTED_STACK_SYMBOL = Symbol.for('@aws-cdk/aws-cloudformation.NestedStack'
  * @experimental
  */
 export interface NestedStackProps {
-
   /**
    * The set value pairs that represent the parameters passed to CloudFormation
    * when this nested stack is created. Each parameter has a name corresponding
@@ -144,63 +144,12 @@ export class NestedStack extends Stack {
   }
 
   /**
-   * Called by the base "prepare" method when a reference is found.
+   * Assign a value to one of the nested stack parameters.
+   * @param name The parameter name (ID)
+   * @param value The value to assign
    */
-  protected prepareCrossReference(sourceStack: Stack, reference: Reference): IResolvable {
-    const targetStack = Stack.of(reference.target);
-
-    // the nested stack references a resource from the parent stack (directly or indirectly):
-    // we add a parameter to our stack and assign it the value of the reference from the parent.
-    // if the source is not directly from the parent, this logic will also happen at the parent level (recursively).
-    if (sourceStack.nestedStackParent && isParentOfNestedStack(targetStack, sourceStack)) {
-      // we call "this.resolve" to ensure that tokens do not creep in (for example, if the reference display name includes tokens)
-      const paramId = this.resolve(`reference-to-${reference.target.node.uniqueId}.${reference.displayName}`);
-      let param = this.node.tryFindChild(paramId) as CfnParameter;
-      if (!param) {
-        param = new CfnParameter(this, paramId, { type: 'String' });
-        this.parameters[param.logicalId] = Token.asString(reference);
-      }
-
-      return param.value;
-    }
-
-    // parent stack references a resource from the nested stack:
-    // we output it from the nested stack and use "Fn::GetAtt" as the reference value
-    if (targetStack === this && targetStack.nestedStackParent === sourceStack) {
-      return this.getCreateOutputForReference(reference);
-    }
-
-    // sibling nested stacks (same parent):
-    // output from one and pass as parameter to the other
-    if (targetStack.nestedStackParent && targetStack.nestedStackParent === sourceStack.nestedStackParent) {
-      const outputValue = this.getCreateOutputForReference(reference);
-      return (sourceStack as NestedStack).prepareCrossReference(sourceStack, outputValue);
-    }
-
-    // nested stack references a value from some other non-nested stack:
-    // normal export/import, with dependency between the parents
-    if (sourceStack.nestedStackParent && sourceStack.nestedStackParent !== targetStack) {
-      return super.prepareCrossReference(sourceStack, reference);
-    }
-
-    // some non-nested stack (that is not the parent) references a resource inside the nested stack:
-    // we output the value and let our parent export it
-    if (!sourceStack.nestedStackParent && targetStack.nestedStackParent && targetStack.nestedStackParent !== sourceStack) {
-      const outputValue = this.getCreateOutputForReference(reference);
-      return (targetStack.nestedStackParent as NestedStack).prepareCrossReference(sourceStack, outputValue);
-    }
-
-    throw new Error('unexpected nested stack cross reference');
-  }
-
-  private getCreateOutputForReference(reference: Reference) {
-    const outputId = `${reference.target.node.uniqueId}${reference.displayName}`;
-    let output = this.node.tryFindChild(outputId) as CfnOutput;
-    if (!output) {
-      output = new CfnOutput(this, outputId, { value: Token.asString(reference) });
-    }
-
-    return this.resource.getAtt(`Outputs.${output.logicalId}`);
+  public setParameter(name: string, value: string) {
+    this.parameters[name] = value;
   }
 
   private contextualAttribute(innerValue: string, outerValue: string) {
@@ -230,23 +179,4 @@ function findParentStack(scope: Construct): Stack {
   }
 
   return parentStack as Stack;
-}
-
-/**
- * @returns true if this stack is a direct or indirect parent of the nested
- * stack `nested`. If `nested` is a top-level stack, returns false.
- */
-export function isParentOfNestedStack(parent: Stack, child: Stack): boolean {
-  // if "nested" is not a nested stack, then by definition we cannot be its parent
-  if (!child.nestedStackParent) {
-    return false;
-  }
-
-  // if this is the direct parent, then we found it
-  if (parent === child.nestedStackParent) {
-    return true;
-  }
-
-  // traverse up
-  return isParentOfNestedStack(parent, child.nestedStackParent);
 }

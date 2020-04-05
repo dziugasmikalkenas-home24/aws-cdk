@@ -873,50 +873,6 @@ export class Stack extends Construct implements ITaggable {
   }
 
   /**
-   * Exports a resolvable value for use in another stack.
-   *
-   * @returns a token that can be used to reference the value from the producing stack.
-   */
-  protected prepareCrossReference(sourceStack: Stack, reference: Reference): IResolvable {
-    const targetStack = Stack.of(reference.target);
-
-    // Ensure a singleton "Exports" scoping Construct
-    // This mostly exists to trigger LogicalID munging, which would be
-    // disabled if we parented constructs directly under Stack.
-    // Also it nicely prevents likely construct name clashes
-    const exportsScope = targetStack.getCreateExportsScope();
-
-    // Ensure a singleton CfnOutput for this value
-    const resolved = targetStack.resolve(reference);
-    const id = 'Output' + JSON.stringify(resolved);
-    const exportName = targetStack.generateExportName(exportsScope, id);
-    const output = exportsScope.node.tryFindChild(id) as CfnOutput;
-    if (!output) {
-      new CfnOutput(exportsScope, id, { value: Token.asString(reference), exportName });
-    }
-
-    // add a dependency on the producing stack - it has to be deployed before this stack can consume the exported value
-    // if the producing stack is a nested stack (i.e. has a parent), the dependency is taken on the parent.
-    const producerDependency = targetStack.nestedStackParent ? targetStack.nestedStackParent : targetStack;
-    const consumerDependency = sourceStack.nestedStackParent ? sourceStack.nestedStackParent : sourceStack;
-    consumerDependency.addDependency(producerDependency, `${sourceStack.node.path} -> ${reference.target.node.path}.${reference.displayName}`);
-
-    // We want to return an actual FnImportValue Token here, but Fn.importValue() returns a 'string',
-    // so construct one in-place.
-    return new Intrinsic({ 'Fn::ImportValue': exportName });
-  }
-
-  private getCreateExportsScope() {
-    const exportsName = 'Exports';
-    let stackExports = this.node.tryFindChild(exportsName) as Construct;
-    if (stackExports === undefined) {
-      stackExports = new Construct(this, exportsName);
-    }
-
-    return stackExports;
-  }
-
-  /**
    * Determine the various stack environment attributes.
    *
    */
@@ -1017,14 +973,6 @@ export class Stack extends Construct implements ITaggable {
     return makeUniqueId(ids);
   }
 
-  private generateExportName(stackExports: Construct, id: string) {
-    const stack = Stack.of(stackExports);
-    const components = [...stackExports.node.scopes.slice(2).map(c => c.node.id), id];
-    const prefix = stack.stackName ? stack.stackName + ':' : '';
-    const exportName = prefix + makeUniqueId(components);
-    return exportName;
-  }
-
   private get assetParameters() {
     if (!this._assetParameters) {
       this._assetParameters = new Construct(this, 'AssetParameters');
@@ -1091,14 +1039,10 @@ import { App } from './app';
 import { Arn, ArnComponents } from './arn';
 import { CfnElement } from './cfn-element';
 import { Fn } from './cfn-fn';
-import { CfnOutput } from './cfn-output';
 import { Aws, ScopedAws } from './cfn-pseudo';
 import { CfnResource, TagType } from './cfn-resource';
 import { addDependency } from './deps';
 import { Lazy } from './lazy';
-import { Intrinsic } from './private/intrinsic';
-import { Reference } from './reference';
-import { IResolvable } from './resolvable';
 import { ITaggable, TagManager } from './tag-manager';
 import { Token } from './token';
 
