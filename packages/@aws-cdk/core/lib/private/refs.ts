@@ -16,30 +16,28 @@ export function prepareReferences(root: Construct) {
   const refs = findAllReferences(root);
 
   for (const ref of refs) {
-    const consumerStack = Stack.of(ref.consumer);
-    const producerStack = Stack.of(ref.producer);
+    const consumer = Stack.of(ref.consumer);
 
-    // skip if this is not a cross-stack reference
-    if (producerStack === consumerStack) {
-      return;
+    // skip if this reference already has a value for stack
+    if (ref.reference.hasValueForStack(consumer)) {
+      continue;
     }
 
     // if the reference has already been assigned a value for the consuming stack, carry on.
-    if (!ref.reference.hasValueForStack(consumerStack)) {
-      const value = getValueForReference(consumerStack, producerStack, ref.reference);
-      ref.reference.assignValueForStack(consumerStack, value);
-    }
+    const value = getValueForReference(ref);
+    ref.reference.assignValueForStack(consumer, value);
   }
 }
 
-interface Ref {
-  readonly refid: string;
-  readonly consumer: CfnElement;
-  readonly producer: Construct;
-  readonly reference: CfnReference;
-}
+function getValueForReference(ref: Edge): IResolvable {
+  const consumer = Stack.of(ref.consumer);
+  const producer = Stack.of(ref.reference.target);
+  const reference = ref.reference;
 
-function getValueForReference(consumer: Stack, producer: Stack, reference: Reference): IResolvable {
+  if (producer === consumer) {
+    return ref.reference;
+  }
+
   // unsupported: stacks from different apps
   if (producer.node.root !== consumer.node.root) {
     throw new Error(
@@ -54,73 +52,45 @@ function getValueForReference(consumer: Stack, producer: Stack, reference: Refer
       `Cross stack references are only supported for stacks deployed to the same environment or between nested stacks and their parent stack`);
   }
 
-  // TODO: once we move deps to this loop
-  // sourceStack.node.addDependency(targetStack);
-
-  // reference between two top-level stacks in the same environment
-  if (!consumer.nested && !producer.nested) {
-    // add a dependency on the producing stack - it has to be deployed before this stack can consume the exported value
-    // if the producing stack is a nested stack (i.e. has a parent), the dependency is taken on the parent.
-    const producerDependency = producer.nestedStackParent ? producer.nestedStackParent : producer;
-    const consumerDependency = consumer.nestedStackParent ? consumer.nestedStackParent : consumer;
-    consumerDependency.addDependency(producerDependency, `${consumer.node.path} -> ${reference.target.node.path}.${reference.displayName}`);
-
-    return exportAndGetImportValue(reference);
-  }
-
   // if the consuming stack is a child of the producing stack, then wire the reference through
-  // a CloudFormation parameter on the nested stack.
-  if (isParentOfNestedStack(producer, consumer)) {
-    return getCreateParameterForReference(consumer, reference);
+  // a CloudFormation parameter on the nested stack and continue recursively
+  if (isParent(producer, consumer)) {
+    const inputValue = createNestedStackParameter(consumer, reference);
+    return getValueForReference({ consumer: ref.consumer, reference: inputValue });
   }
 
-  // if the consumer is a parent of the producer, then wire the reference by creating an
-  // output on the nested stack and referencing it through a GetAtt.Outputs attribute.
-  if (isParentOfNestedStack(consumer, producer)) {
-    return getCreateOutputForReference(producer, reference);
+  // if the producer is nested, we always publish the value through an output
+  // because we can't generate an "export name" for nested stacks (the name
+  // includes the stack name, to ensure uniqness), and it only resolves during
+  // deployment. Therefore the export name cannot be used in the consuming side,
+  // so we simply publish the value through an export and recuse because now the
+  // value is basically available in the parent.
+  if (producer.nested) {
+    const outputValue = createNestedStackOutput(producer, reference);
+    return getValueForReference({ consumer: ref.consumer, reference: outputValue });
   }
 
-  // sibling nested stacks (same parent):
-  // output from one and pass as parameter to the other
-  if (producer.nestedStackParent && producer.nestedStackParent === consumer.nestedStackParent) {
-    const outputValue = getCreateOutputForReference(producer, reference);
-    return getCreateParameterForReference(consumer, outputValue);
-  }
+  // add a dependency on the producing stack - it has to be deployed before this
+  // stack can consume the exported value if the producing stack is a nested
+  // stack (i.e. has a parent), the dependency is taken on the parent.
+  const producerDep = producer.nestedStackParent ?? producer;
+  const consumerDep = consumer.nestedStackParent ?? consumer;
+  consumerDep.addDependency(producerDep,
+    `${consumer.node.path} -> ${reference.target.node.path}.${reference.displayName}`);
 
-  // sibling nested stacks (same parent):
-  // output from one and pass as parameter to the other
-  if (consumer.nestedStackParent && producer.nestedStackParent && producer.nestedStackParent === consumer.nestedStackParent) {
-    const outputValue = getCreateOutputForReference(consumer, reference);
-    return getCreateParameterForReference(consumer, outputValue);
-  }
+  return exportAndGetImportValue(reference);
+}
 
-  // nested stack references a value from some other non-nested stack:
-  // normal export/import, with dependency between the parents
-  if (producer.nestedStackParent && consumer.nestedStackParent && consumer.nestedStackParent !== producer) {
-    return getValueForReference(consumer.nestedStackParent, producer, reference);
-  }
-
-  // nested stack references a value from some other non-nested stack:
-  // normal export/import, with dependency between the parents
-  if (consumer.nestedStackParent && consumer.nestedStackParent !== producer) {
-    return getValueForReference(consumer.nestedStackParent, producer, reference);
-  }
-
-  // some non-nested stack (that is not the parent) references a resource inside the nested stack:
-  // we output the value and let our parent export it
-  if (producer.nestedStackParent && !consumer.nestedStackParent && producer.nestedStackParent && producer.nestedStackParent !== consumer) {
-    const outputValue = getCreateOutputForReference(producer, reference);
-    return getValueForReference(consumer, producer.nestedStackParent, outputValue);
-  }
-
-  throw new Error('unexpected nested stack cross reference');
+interface Edge {
+  readonly consumer: CfnElement;
+  readonly reference: CfnReference;
 }
 
 /**
  * Returns all the tokens used within the scope of the current stack.
  */
 function findAllReferences(root: Construct) {
-  const result = new Array<Ref>();
+  const result = new Array<Edge>();
   for (const source of root.node.findAll()) {
     if (!CfnElement.isCfnElement(source)) {
       continue;
@@ -130,19 +100,12 @@ function findAllReferences(root: Construct) {
       const tokens = findTokens(source, () => source._toCloudFormation());
       for (const token of tokens) {
         if (CfnReference.isCfnReference(token)) {
-          const refid = JSON.stringify({
-            consumer: source.node.path,
-            producer: token.target.node.path,
-            ref: token.displayName
-          });
 
           if (!(token.target instanceof Construct)) {
             throw new Error(`objects that implement IConstruct must extend "Construct"`);
           }
 
           result.push({
-            refid,
-            producer: token.target,
             consumer: source,
             reference: token
           });
@@ -186,6 +149,11 @@ function exportAndGetImportValue(reference: Reference): IResolvable {
   const resolved = exportingStack.resolve(reference);
   const id = 'Output' + JSON.stringify(resolved);
   const exportName = generateExportName(exportsScope, id);
+
+  if (Token.isUnresolved(exportName)) {
+    throw new Error(`unresolved token in generated export name: ${JSON.stringify(exportingStack.resolve(exportName))}`);
+  }
+
   const output = exportsScope.node.tryFindChild(id) as CfnOutput;
   if (!output) {
     new CfnOutput(exportsScope, id, { value: Token.asString(reference), exportName });
@@ -218,7 +186,7 @@ function generateExportName(stackExports: Construct, id: string) {
 // NESTED STACKS
 //////////////////////////////////////
 
-function getCreateParameterForReference(consumer: Stack, reference: Reference) {
+function createNestedStackParameter(consumer: Stack, reference: Reference) {
   // we call "this.resolve" to ensure that tokens do not creep in (for example, if the reference display name includes tokens)
   const paramId = consumer.resolve(`reference-to-${reference.target.node.uniqueId}.${reference.displayName}`);
   let param = consumer.node.tryFindChild(paramId) as CfnParameter;
@@ -233,10 +201,10 @@ function getCreateParameterForReference(consumer: Stack, reference: Reference) {
     (consumer as any).setParameter(param.logicalId, Token.asString(reference));
   }
 
-  return param.value;
+  return param.value as CfnReference;
 }
 
-function getCreateOutputForReference(producer: Stack, reference: Reference) {
+function createNestedStackOutput(producer: Stack, reference: Reference): CfnReference {
   const outputId = `${reference.target.node.uniqueId}${reference.displayName}`;
   let output = producer.node.tryFindChild(outputId) as CfnOutput;
   if (!output) {
@@ -247,14 +215,14 @@ function getCreateOutputForReference(producer: Stack, reference: Reference) {
     throw new Error('assertion failed');
   }
 
-  return producer.nestedStackResource.getAtt(`Outputs.${output.logicalId}`);
+  return producer.nestedStackResource.getAtt(`Outputs.${output.logicalId}`) as CfnReference;
 }
 
 /**
  * @returns true if this stack is a direct or indirect parent of the nested
  * stack `nested`. If `nested` is a top-level stack, returns false.
  */
-export function isParentOfNestedStack(parent: Stack, child: Stack): boolean {
+export function isParent(parent: Stack, child: Stack): boolean {
   // if "nested" is not a nested stack, then by definition we cannot be its parent
   if (!child.nestedStackParent) {
     return false;
@@ -266,5 +234,5 @@ export function isParentOfNestedStack(parent: Stack, child: Stack): boolean {
   }
 
   // traverse up
-  return isParentOfNestedStack(parent, child.nestedStackParent);
+  return isParent(parent, child.nestedStackParent);
 }
