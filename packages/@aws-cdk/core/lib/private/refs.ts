@@ -16,52 +16,104 @@ export function prepareReferences(root: Construct) {
   const refs = findAllReferences(root);
 
   for (const ref of refs) {
-    const sourceStack = Stack.of(ref.source);
-    const targetStack = Stack.of(ref.target);
+    const consumerStack = Stack.of(ref.consumer);
+    const producerStack = Stack.of(ref.producer);
 
     // skip if this is not a cross-stack reference
-    if (targetStack === sourceStack) {
+    if (producerStack === consumerStack) {
       return;
     }
 
     // if the reference has already been assigned a value for the consuming stack, carry on.
-    if (!ref.reference.hasValueForStack(sourceStack)) {
-      const consumedValue = prepareCrossReference(sourceStack, targetStack, ref.reference);
-      ref.reference.assignValueForStack(sourceStack, consumedValue);
+    if (!ref.reference.hasValueForStack(consumerStack)) {
+      const value = getValueForReference(consumerStack, producerStack, ref.reference);
+      ref.reference.assignValueForStack(consumerStack, value);
     }
   }
 }
 
 interface Ref {
   readonly refid: string;
-  readonly source: CfnElement;
-  readonly target: Construct;
+  readonly consumer: CfnElement;
+  readonly producer: Construct;
   readonly reference: CfnReference;
 }
 
-function prepareCrossReference(sourceStack: Stack, targetStack: Stack, reference: Reference) {
+function getValueForReference(consumer: Stack, producer: Stack, reference: Reference): IResolvable {
   // unsupported: stacks from different apps
-  if (targetStack.node.root !== sourceStack.node.root) {
+  if (producer.node.root !== consumer.node.root) {
     throw new Error(
       `Cannot reference across apps. ` +
       `Consuming and producing stacks must be defined within the same CDK app.`);
   }
 
   // unsupported: stacks are not in the same environment
-  if (targetStack.environment !== sourceStack.environment) {
+  if (producer.environment !== consumer.environment) {
     throw new Error(
-      `Stack "${sourceStack.node.path}" cannot consume a cross reference from stack "${targetStack.node.path}". ` +
+      `Stack "${consumer.node.path}" cannot consume a cross reference from stack "${producer.node.path}". ` +
       `Cross stack references are only supported for stacks deployed to the same environment or between nested stacks and their parent stack`);
   }
 
-  // if one of the stacks is a nested stack, go ahead and give it the right to make the cross reference
-  if (targetStack.nested) {
-    return prepareCrossReferenceNested(targetStack, sourceStack, reference);
-  } else if (sourceStack.nested) {
-    return prepareCrossReferenceNested(sourceStack, sourceStack, reference);
-  } else {
-    return prepareCrossReferenceNonNested(sourceStack, reference);
+  // TODO: once we move deps to this loop
+  // sourceStack.node.addDependency(targetStack);
+
+  // reference between two top-level stacks in the same environment
+  if (!consumer.nested && !producer.nested) {
+    // add a dependency on the producing stack - it has to be deployed before this stack can consume the exported value
+    // if the producing stack is a nested stack (i.e. has a parent), the dependency is taken on the parent.
+    const producerDependency = producer.nestedStackParent ? producer.nestedStackParent : producer;
+    const consumerDependency = consumer.nestedStackParent ? consumer.nestedStackParent : consumer;
+    consumerDependency.addDependency(producerDependency, `${consumer.node.path} -> ${reference.target.node.path}.${reference.displayName}`);
+
+    return exportAndGetImportValue(reference);
   }
+
+  // if the consuming stack is a child of the producing stack, then wire the reference through
+  // a CloudFormation parameter on the nested stack.
+  if (isParentOfNestedStack(producer, consumer)) {
+    return getCreateParameterForReference(consumer, reference);
+  }
+
+  // if the consumer is a parent of the producer, then wire the reference by creating an
+  // output on the nested stack and referencing it through a GetAtt.Outputs attribute.
+  if (isParentOfNestedStack(consumer, producer)) {
+    return getCreateOutputForReference(producer, reference);
+  }
+
+  // sibling nested stacks (same parent):
+  // output from one and pass as parameter to the other
+  if (producer.nestedStackParent && producer.nestedStackParent === consumer.nestedStackParent) {
+    const outputValue = getCreateOutputForReference(producer, reference);
+    return getCreateParameterForReference(consumer, outputValue);
+  }
+
+  // sibling nested stacks (same parent):
+  // output from one and pass as parameter to the other
+  if (consumer.nestedStackParent && producer.nestedStackParent && producer.nestedStackParent === consumer.nestedStackParent) {
+    const outputValue = getCreateOutputForReference(consumer, reference);
+    return getCreateParameterForReference(consumer, outputValue);
+  }
+
+  // nested stack references a value from some other non-nested stack:
+  // normal export/import, with dependency between the parents
+  if (producer.nestedStackParent && consumer.nestedStackParent && consumer.nestedStackParent !== producer) {
+    return getValueForReference(consumer.nestedStackParent, producer, reference);
+  }
+
+  // nested stack references a value from some other non-nested stack:
+  // normal export/import, with dependency between the parents
+  if (consumer.nestedStackParent && consumer.nestedStackParent !== producer) {
+    return getValueForReference(consumer.nestedStackParent, producer, reference);
+  }
+
+  // some non-nested stack (that is not the parent) references a resource inside the nested stack:
+  // we output the value and let our parent export it
+  if (producer.nestedStackParent && !consumer.nestedStackParent && producer.nestedStackParent && producer.nestedStackParent !== consumer) {
+    const outputValue = getCreateOutputForReference(producer, reference);
+    return getValueForReference(consumer, producer.nestedStackParent, outputValue);
+  }
+
+  throw new Error('unexpected nested stack cross reference');
 }
 
 /**
@@ -79,8 +131,8 @@ function findAllReferences(root: Construct) {
       for (const token of tokens) {
         if (CfnReference.isCfnReference(token)) {
           const refid = JSON.stringify({
-            source: source.node.path,
-            target: token.target.node.path,
+            consumer: source.node.path,
+            producer: token.target.node.path,
             ref: token.displayName
           });
 
@@ -90,8 +142,8 @@ function findAllReferences(root: Construct) {
 
           result.push({
             refid,
-            target: token.target,
-            source,
+            producer: token.target,
+            consumer: source,
             reference: token
           });
         }
@@ -118,33 +170,26 @@ function findAllReferences(root: Construct) {
 }
 
 /**
- * Exports a resolvable value for use in another stack.
- *
- * @returns a token that can be used to reference the value from the producing stack.
+ * Imports a value from another stack by creating an "Output" with an "ExportName"
+ * and returning an "Fn::ImportValue" token.
  */
-function prepareCrossReferenceNonNested(sourceStack: Stack, reference: Reference): IResolvable {
-  const targetStack = Stack.of(reference.target);
+function exportAndGetImportValue(reference: Reference): IResolvable {
+  const exportingStack = Stack.of(reference.target);
 
   // Ensure a singleton "Exports" scoping Construct
   // This mostly exists to trigger LogicalID munging, which would be
   // disabled if we parented constructs directly under Stack.
   // Also it nicely prevents likely construct name clashes
-  const exportsScope = getCreateExportsScope(targetStack);
+  const exportsScope = getCreateExportsScope(exportingStack);
 
   // Ensure a singleton CfnOutput for this value
-  const resolved = targetStack.resolve(reference);
+  const resolved = exportingStack.resolve(reference);
   const id = 'Output' + JSON.stringify(resolved);
   const exportName = generateExportName(exportsScope, id);
   const output = exportsScope.node.tryFindChild(id) as CfnOutput;
   if (!output) {
     new CfnOutput(exportsScope, id, { value: Token.asString(reference), exportName });
   }
-
-  // add a dependency on the producing stack - it has to be deployed before this stack can consume the exported value
-  // if the producing stack is a nested stack (i.e. has a parent), the dependency is taken on the parent.
-  const producerDependency = targetStack.nestedStackParent ? targetStack.nestedStackParent : targetStack;
-  const consumerDependency = sourceStack.nestedStackParent ? sourceStack.nestedStackParent : sourceStack;
-  consumerDependency.addDependency(producerDependency, `${sourceStack.node.path} -> ${reference.target.node.path}.${reference.displayName}`);
 
   // We want to return an actual FnImportValue Token here, but Fn.importValue() returns a 'string',
   // so construct one in-place.
@@ -173,82 +218,36 @@ function generateExportName(stackExports: Construct, id: string) {
 // NESTED STACKS
 //////////////////////////////////////
 
-/**
- * Called by the base "prepare" method when a reference is found.
- */
-function prepareCrossReferenceNested(nested: Stack, sourceStack: Stack, reference: Reference): IResolvable {
-  const targetStack = Stack.of(reference.target);
+function getCreateParameterForReference(consumer: Stack, reference: Reference) {
+  // we call "this.resolve" to ensure that tokens do not creep in (for example, if the reference display name includes tokens)
+  const paramId = consumer.resolve(`reference-to-${reference.target.node.uniqueId}.${reference.displayName}`);
+  let param = consumer.node.tryFindChild(paramId) as CfnParameter;
+  if (!param) {
+    param = new CfnParameter(consumer, paramId, { type: 'String' });
 
-  if (!nested.nestedStackResource) {
-    throw new Error(`assertion failed: nested stacks must have a "nestedStackResource"`);
-  }
-
-  if (nested.nestedStackResource.cfnResourceType !== 'AWS::CloudFormation::Stack') {
-    throw new Error(`assertion failed: nested stack resource must be an AWS::CloudFormation::Stack resource`);
-  }
-
-  // the nested stack references a resource from the parent stack (directly or indirectly):
-  // we add a parameter to our stack and assign it the value of the reference from the parent.
-  // if the source is not directly from the parent, this logic will also happen at the parent level (recursively).
-  if (sourceStack.nestedStackParent && isParentOfNestedStack(targetStack, sourceStack)) {
-    // we call "this.resolve" to ensure that tokens do not creep in (for example, if the reference display name includes tokens)
-    const paramId = nested.resolve(`reference-to-${reference.target.node.uniqueId}.${reference.displayName}`);
-    let param = nested.node.tryFindChild(paramId) as CfnParameter;
-    if (!param) {
-      param = new CfnParameter(nested, paramId, { type: 'String' });
-
-      // Ugly little hack until we move NestedStack to this module.
-      if (!('setParameter' in nested)) {
-        throw new Error(`assertion failed: nested stack should have a "setParameter" method`);
-      }
-
-      (nested as any).setParameter(param.logicalId, Token.asString(reference));
+    // Ugly little hack until we move NestedStack to this module.
+    if (!('setParameter' in consumer)) {
+      throw new Error(`assertion failed: nested stack should have a "setParameter" method`);
     }
 
-    return param.value;
+    (consumer as any).setParameter(param.logicalId, Token.asString(reference));
   }
 
-  // parent stack references a resource from the nested stack:
-  // we output it from the nested stack and use "Fn::GetAtt" as the reference value
-  if (targetStack === nested && targetStack.nestedStackParent === sourceStack) {
-    return getCreateOutputForReference(nested, reference);
-  }
-
-  // sibling nested stacks (same parent):
-  // output from one and pass as parameter to the other
-  if (targetStack.nestedStackParent && targetStack.nestedStackParent === sourceStack.nestedStackParent) {
-    const outputValue = getCreateOutputForReference(nested, reference);
-    return prepareCrossReferenceNested(sourceStack, sourceStack, outputValue);
-  }
-
-  // nested stack references a value from some other non-nested stack:
-  // normal export/import, with dependency between the parents
-  if (sourceStack.nestedStackParent && sourceStack.nestedStackParent !== targetStack) {
-    return prepareCrossReferenceNonNested(sourceStack, reference);
-  }
-
-  // some non-nested stack (that is not the parent) references a resource inside the nested stack:
-  // we output the value and let our parent export it
-  if (!sourceStack.nestedStackParent && targetStack.nestedStackParent && targetStack.nestedStackParent !== sourceStack) {
-    const outputValue = getCreateOutputForReference(nested, reference);
-    return prepareCrossReference(sourceStack, targetStack.nestedStackParent, outputValue);
-  }
-
-  throw new Error('unexpected nested stack cross reference');
+  return param.value;
 }
 
-function getCreateOutputForReference(nested: Stack, reference: Reference) {
+function getCreateOutputForReference(producer: Stack, reference: Reference) {
   const outputId = `${reference.target.node.uniqueId}${reference.displayName}`;
-  let output = nested.node.tryFindChild(outputId) as CfnOutput;
+  let output = producer.node.tryFindChild(outputId) as CfnOutput;
   if (!output) {
-    output = new CfnOutput(nested, outputId, { value: Token.asString(reference) });
+    output = new CfnOutput(producer, outputId, { value: Token.asString(reference) });
   }
 
-  if (!nested.nestedStackResource) {
+  if (!producer.nestedStackResource) {
     throw new Error('assertion failed');
   }
 
-  return nested.nestedStackResource.getAtt(`Outputs.${output.logicalId}`);
+  return producer.nestedStackResource.getAtt(`Outputs.${output.logicalId}`);
 }
 
 /**
