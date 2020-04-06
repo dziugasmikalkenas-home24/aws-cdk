@@ -176,7 +176,8 @@ export = {
   },
 
   'automatically assigns artifact names to the Actions'(test: Test) {
-    const stack = new cdk.Stack();
+    const app = new cdk.App();
+    const stack = new cdk.Stack(app, 'stack');
     const pipeline = new codepipeline.Pipeline(stack, 'pipeline');
 
     const sourceOutput = new codepipeline.Artifact();

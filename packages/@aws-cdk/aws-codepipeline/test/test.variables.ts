@@ -42,7 +42,8 @@ export = {
     },
 
     'allows using the variable in the configuration of a different action'(test: Test) {
-      const stack = new cdk.Stack();
+      const app = new cdk.App();
+      const stack = new cdk.Stack(app, 'stack');
       const sourceOutput = new codepipeline.Artifact();
       const fakeSourceAction = new FakeSourceAction({
         actionName: 'Source',

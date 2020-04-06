@@ -244,7 +244,9 @@ export = {
         const replicationRegion = 'us-west-1';
 
         const pipelineRegion = 'us-west-2';
-        const pipelineStack = new cdk.Stack(undefined, undefined, {
+
+        const app = new cdk.App();
+        const pipelineStack = new cdk.Stack(app, 'stack', {
           env: { region: pipelineRegion },
         });
         const sourceOutput = new codepipeline.Artifact();

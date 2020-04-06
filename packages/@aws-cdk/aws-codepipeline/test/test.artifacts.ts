@@ -16,7 +16,8 @@ export = {
     },
 
     'without a name, when used as an input without being used as an output first - should fail validation'(test: Test) {
-      const stack = new cdk.Stack();
+      const app = new cdk.App();
+      const stack = new cdk.Stack(app, 'stack');
       const sourceOutput = new codepipeline.Artifact();
       const pipeline = new codepipeline.Pipeline(stack, 'Pipeline', {
         stages: [
@@ -88,7 +89,8 @@ export = {
     },
 
     'without a name, when used as an output multiple times - should fail validation'(test: Test) {
-      const stack = new cdk.Stack();
+      const app = new cdk.App();
+      const stack = new cdk.Stack(app, 'stack');
       const sourceOutput = new codepipeline.Artifact();
       const pipeline = new codepipeline.Pipeline(stack, 'Pipeline', {
         stages: [
@@ -125,7 +127,8 @@ export = {
     },
 
     "an Action's output can be used as input for an Action in the same Stage with a higher runOrder"(test: Test) {
-      const stack = new cdk.Stack();
+      const app = new cdk.App();
+      const stack = new cdk.Stack(app, 'stack');
 
       const sourceOutput1 = new codepipeline.Artifact('sourceOutput1');
       const buildOutput1 = new codepipeline.Artifact('buildOutput1');
@@ -174,7 +177,8 @@ export = {
     },
 
     'without a name, sanitize the auto stage-action derived name'(test: Test) {
-      const stack = new cdk.Stack();
+      const app = new cdk.App();
+      const stack = new cdk.Stack(app, 'stack');
 
       const sourceOutput = new codepipeline.Artifact();
       new codepipeline.Pipeline(stack, 'Pipeline', {
@@ -233,6 +237,6 @@ export = {
 };
 
 function validate(construct: cdk.IConstruct): cdk.ValidationError[] {
-  cdk.ConstructNode.prepare(construct.node);
-  return cdk.ConstructNode.validate(construct.node);
+  cdk.ConstructNode.prepare(construct.node.root.node);
+  return cdk.ConstructNode.validate(construct.node.root.node);
 }
