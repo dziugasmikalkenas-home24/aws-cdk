@@ -1,6 +1,6 @@
-import { CfnResource } from "./cfn-resource";
-import { Stack } from "./stack";
-import { findLastCommonElement, pathToTopLevelStack as pathToRoot } from "./util";
+import { CfnResource } from './cfn-resource';
+import { Stack } from './stack';
+import { findLastCommonElement, pathToTopLevelStack as pathToRoot } from './util';
 
 type Element = CfnResource | Stack;
 

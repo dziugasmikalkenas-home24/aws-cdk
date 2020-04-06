@@ -1,4 +1,4 @@
-import { Reference } from "../reference";
+import { Reference } from '../reference';
 
 const CFN_REFERENCE_SYMBOL = Symbol.for('@aws-cdk/core.CfnReference');
 
@@ -121,7 +121,7 @@ export class CfnReference extends Reference {
     }
 
     if (this.hasValueForStack(stack)) {
-      throw new Error(`Cannot assign a reference value twice to the same stack. Use hasValueForStack to check first`);
+      throw new Error('Cannot assign a reference value twice to the same stack. Use hasValueForStack to check first');
     }
 
     this.replacementTokens.set(stack, value);
@@ -136,8 +136,8 @@ export class CfnReference extends Reference {
   }
 }
 
-import { CfnElement } from "../cfn-element";
-import { Construct, IConstruct } from "../construct-compat";
-import { IResolvable, IResolveContext } from "../resolvable";
-import { Stack } from "../stack";
-import { Token } from "../token";
+import { CfnElement } from '../cfn-element';
+import { Construct, IConstruct } from '../construct-compat';
+import { IResolvable, IResolveContext } from '../resolvable';
+import { Stack } from '../stack';
+import { Token } from '../token';
