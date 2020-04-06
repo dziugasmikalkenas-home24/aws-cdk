@@ -856,7 +856,7 @@ export class Stack extends Construct implements ITaggable {
       Metadata: this.templateOptions.metadata
     };
 
-    const elements = CfnElement._findAll(this);
+    const elements = cfnElements(this);
     const fragments = elements.map(e => this.resolve(e._toCloudFormation()));
 
     // merge in all CloudFormation fragments collected from the tree
@@ -999,6 +999,28 @@ function merge(template: any, part: any) {
       }
     }
   }
+}
+
+/**
+ * Collect all CfnElements from a Stack.
+ *
+ * @param node Root node to collect all CfnElements from
+ * @param into Array to append CfnElements to
+ * @returns The same array as is being collected into
+ */
+function cfnElements(node: IConstruct, into: CfnElement[] = []): CfnElement[] {
+  if (CfnElement.isCfnElement(node)) {
+    into.push(node);
+  }
+
+  for (const child of node.node.children) {
+    // Don't recurse into a substack
+    if (Stack.isStack(child)) { continue; }
+
+    cfnElements(child, into);
+  }
+
+  return into;
 }
 
 /**

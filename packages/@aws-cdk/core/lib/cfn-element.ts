@@ -1,5 +1,5 @@
 import * as cxapi from '@aws-cdk/cx-api';
-import { Construct, IConstruct } from "./construct-compat";
+import { Construct } from "./construct-compat";
 import { Lazy } from "./lazy";
 import { Token } from './token';
 
@@ -20,30 +20,6 @@ export abstract class CfnElement extends Construct {
    */
   public static isCfnElement(x: any): x is CfnElement {
     return CFN_ELEMENT_SYMBOL in x;
-  }
-
-  /**
-   * Finds all CfnElements in a scope (does not recurse into sub-stacks).
-   *
-   * @param node Root node to collect all CfnElements from
-   * @param into Array to append CfnElements to
-   * @returns The same array as is being collected into
-   *
-   * @internal
-   */
-  public static _findAll(node: IConstruct, into: CfnElement[] = []): CfnElement[] {
-    if (CfnElement.isCfnElement(node)) {
-      into.push(node);
-    }
-
-    for (const child of node.node.children) {
-      // Don't recurse into a substack
-      if (Stack.isStack(child)) { continue; }
-
-      this._findAll(child, into);
-    }
-
-    return into;
   }
 
   /**
