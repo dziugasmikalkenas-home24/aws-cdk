@@ -880,9 +880,9 @@ export = {
     });
     expect(parent).to(haveResource('CONSUMER', {
       ConsumedAttribute: {
-        "Fn::GetAtt": [
-          "nestedNestedStacknestedNestedStackResource3DD143BF",
-          "Outputs.stacknestedresourceinnested8646DE1FConsumedAttribute"
+        'Fn::GetAtt': [
+          'nestedNestedStacknestedNestedStackResource3DD143BF',
+          'Outputs.stacknestedresourceinnested8646DE1FConsumedAttribute'
         ]
       }
     }));
@@ -935,13 +935,13 @@ export = {
     expect(top).to(haveResource('AWS::CloudFormation::Stack', {
       Parameters: {
         referencetostacktoplevelBB16BF13Ref: {
-          Ref: "toplevel"
+          Ref: 'toplevel'
         },
         referencetostackAssetParameters842982bd421cce9742ba27151ef12ed699d44d22801f41e8029f63f2358a3f2fS3Bucket5DA5D2E7Ref: {
-          Ref: "AssetParameters842982bd421cce9742ba27151ef12ed699d44d22801f41e8029f63f2358a3f2fS3BucketDD4D96B5"
+          Ref: 'AssetParameters842982bd421cce9742ba27151ef12ed699d44d22801f41e8029f63f2358a3f2fS3BucketDD4D96B5'
         },
         referencetostackAssetParameters842982bd421cce9742ba27151ef12ed699d44d22801f41e8029f63f2358a3f2fS3VersionKey8FBE5C12Ref: {
-          Ref: "AssetParameters842982bd421cce9742ba27151ef12ed699d44d22801f41e8029f63f2358a3f2fS3VersionKey83E381F3"
+          Ref: 'AssetParameters842982bd421cce9742ba27151ef12ed699d44d22801f41e8029f63f2358a3f2fS3VersionKey83E381F3'
         }
       }
     }));
@@ -949,7 +949,7 @@ export = {
     expect(nested1).to(haveResource('AWS::CloudFormation::Stack', {
       Parameters: {
         referencetostacktoplevelBB16BF13Ref: {
-          Ref: "referencetostacktoplevelBB16BF13Ref"
+          Ref: 'referencetostacktoplevelBB16BF13Ref'
         }
       }
     }));
@@ -957,17 +957,17 @@ export = {
     expect(nested2).to(matchTemplate({
       Resources: {
         refToTopLevel: {
-          Type: "BottomLevel",
+          Type: 'BottomLevel',
           Properties: {
             RefToTopLevel: {
-              Ref: "referencetostacktoplevelBB16BF13Ref"
+              Ref: 'referencetostacktoplevelBB16BF13Ref'
             }
           }
         }
       },
       Parameters: {
         referencetostacktoplevelBB16BF13Ref: {
-          Type: "String"
+          Type: 'String'
         },
       },
     }));
