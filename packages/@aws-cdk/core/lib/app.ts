@@ -1,6 +1,6 @@
 import * as cxapi from '@aws-cdk/cx-api';
 import { Construct, ConstructNode } from './construct-compat';
-import { prepareReferences } from './private/refs';
+import { resolveReferences } from './private/refs';
 import { collectRuntimeInformation } from './private/runtime-info';
 import { TreeMetadata } from './private/tree-metadata';
 
@@ -169,7 +169,7 @@ export class App extends Construct {
 
     let done = false;
     while (!done) {
-      prepareReferences(this);
+      resolveReferences(this);
 
       done = true;
       for (const req of this.afterStabilizeRequests) {

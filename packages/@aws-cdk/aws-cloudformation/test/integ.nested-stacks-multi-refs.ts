@@ -1,5 +1,5 @@
 import * as sns from '@aws-cdk/aws-sns';
-import { App, Stack } from '@aws-cdk/core';
+import { App, Fn, Stack } from '@aws-cdk/core';
 import { NestedStack } from '../lib';
 
 const app = new App();
@@ -11,15 +11,21 @@ const nested3 = new NestedStack(nested2, 'Nested3');
 
 // WHEN
 const level2 = new sns.Topic(nested2, 'Level2ReferencesLevel1', {
-  displayName: level1.topicArn
+  displayName: shortName(level1.topicName)
 });
 
 new sns.Topic(nested3, 'Level3ReferencesLevel1', {
-  displayName: level1.topicArn
+  displayName: shortName(level1.topicName)
 });
 
 new sns.Topic(nested3, 'Level3ReferencesLevel2', {
-  displayName: level2.topicArn
+  displayName: shortName(level2.topicName)
 });
 
 app.synth();
+
+// topicName is too long for displayName, so just take the second part:
+// Stack1-NestedUnderStack1NestedStackNestedUnderStack1NestedStackResourceF616305B-EM64TEGA04J9-TopicInNestedUnderStack115E329C4-HEO7NLYC1AFL
+function shortName(topicName: string) {
+  return Fn.select(1, Fn.split('-', topicName));
+}

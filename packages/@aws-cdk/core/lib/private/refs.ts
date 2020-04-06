@@ -1,4 +1,6 @@
-
+// ----------------------------------------------------
+// CROSS REFERENCES
+// ----------------------------------------------------
 import { CfnElement } from "../cfn-element";
 import { CfnOutput } from "../cfn-output";
 import { CfnParameter } from "../cfn-parameter";
@@ -12,8 +14,12 @@ import { Intrinsic } from './intrinsic';
 import { findTokens } from "./resolve";
 import { makeUniqueId } from "./uniqueid";
 
-export function prepareReferences(root: Construct) {
-  const edges = findAllReferences(root);
+/**
+ * This is called from the App level to resolve all references defined. Each
+ * reference is resolved based on it's consumption context.
+ */
+export function resolveReferences(scope: Construct) {
+  const edges = findAllReferences(scope);
 
   for (const { source, value } of edges) {
     const consumer = Stack.of(source);
@@ -42,9 +48,7 @@ function resolveValue(consumer: Stack, reference: CfnReference): IResolvable {
 
   // unsupported: stacks from different apps
   if (producer.node.root !== consumer.node.root) {
-    throw new Error(
-      `Cannot reference across apps. ` +
-      `Consuming and producing stacks must be defined within the same CDK app.`);
+    throw new Error(`Cannot reference across apps. Consuming and producing stacks must be defined within the same CDK app.`);
   }
 
   // unsupported: stacks are not in the same environment
@@ -54,33 +58,51 @@ function resolveValue(consumer: Stack, reference: CfnReference): IResolvable {
       `Cross stack references are only supported for stacks deployed to the same environment or between nested stacks and their parent stack`);
   }
 
-  // if the consuming stack is a child of the producing stack, then wire the reference through
-  // a CloudFormation parameter on the nested stack and continue recursively
+  // ----------------------------------------------------------------------
+  // consumer is nested in the producer (directly or indirectly)
+  // ----------------------------------------------------------------------
+
+  // if the consumer is a child of the producer, wire the reference through a
+  // CloudFormation parameter on the consumer and resolve recursively.
   if (isParent(producer, consumer)) {
-    const inputValue = createNestedStackParameter(consumer, reference);
-    return resolveValue(consumer, inputValue);
+    const parameterValue = createNestedStackParameter(consumer, reference);
+    return resolveValue(consumer, parameterValue);
   }
 
-  // if the producer is nested, we always publish the value through an output
-  // because we can't generate an "export name" for nested stacks (the name
-  // includes the stack name, to ensure uniqness), and it only resolves during
-  // deployment. Therefore the export name cannot be used in the consuming side,
-  // so we simply publish the value through an export and recuse because now the
-  // value is basically available in the parent.
+  // ----------------------------------------------------------------------
+  // producer is a nested stack
+  // ----------------------------------------------------------------------
+
+  // if the producer is nested, always publish the value through a
+  // cloudformation output and resolve recursively with the Fn::GetAtt
+  // of the output in the parent stack.
+
+  // one might ask, if the consumer is not a parent of the producer,
+  // why not just use export/import? the reason is that we cannot
+  // generate an "export name" from a nested stack because the export
+  // name must contain the stack name to ensure uniqueness, and we
+  // don't know the stack name of a nested stack before we deploy it.
+  // therefore, we can only export from a top-level stack.
   if (producer.nested) {
     const outputValue = createNestedStackOutput(producer, reference);
     return resolveValue(consumer, outputValue);
   }
 
-  // add a dependency on the producing stack - it has to be deployed before this
-  // stack can consume the exported value if the producing stack is a nested
-  // stack (i.e. has a parent), the dependency is taken on the parent.
+  // ----------------------------------------------------------------------
+  // export/import
+  // ----------------------------------------------------------------------
+
+  // export the value through a cloudformation "export name" and use an
+  // Fn::ImportValue in the consumption site.
+
+  // delcare a dependency between the two top-level (non-nested) stacks to make
+  // sure the producer is deployed before the consumer.
   const producerDep = producer.nestedStackParent ?? producer;
   const consumerDep = consumer.nestedStackParent ?? consumer;
   consumerDep.addDependency(producerDep,
     `${consumer.node.path} -> ${reference.target.node.path}.${reference.displayName}`);
 
-  return exportAndGetImportValue(reference);
+  return createImportValue(reference);
 }
 
 /**
@@ -141,7 +163,7 @@ function findAllReferences(root: Construct) {
  * Imports a value from another stack by creating an "Output" with an "ExportName"
  * and returning an "Fn::ImportValue" token.
  */
-function exportAndGetImportValue(reference: Reference): IResolvable {
+function createImportValue(reference: Reference): IResolvable {
   const exportingStack = Stack.of(reference.target);
 
   // Ensure a singleton "Exports" scoping Construct
