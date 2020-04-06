@@ -1,4 +1,3 @@
-import { SynthUtils } from '@aws-cdk/assert';
 import '@aws-cdk/assert/jest';
 import * as cdk from '@aws-cdk/core';
 import * as iam from '../lib';
@@ -52,13 +51,15 @@ describe('automatic cross-stack references', () => {
 
   test('cannot reference tokens across apps', () => {
     // GIVEN
-    const stack1 = new cdk.Stack();
-    const stack2 = new cdk.Stack();
-    const user = new iam.User(stack1, 'User');
-    const group = new iam.Group(stack2, 'Group');
-    group.addUser(user);
+    const app1 = new cdk.App();
+    const app2 = new cdk.App();
+    const stack1 = new cdk.Stack(app1, 'stack1');
+    const stack2 = new cdk.Stack(app2, 'stack2');
+    const user1 = new iam.User(stack1, 'User');
+    const group2 = new iam.Group(stack2, 'Group');
+    group2.addUser(user1);
 
     // THEN
-    expect(() => SynthUtils.synthesize(stack1)).toThrow(/Cannot reference across apps/);
+    expect(() => app1.synth()).toThrow(/Cannot reference across apps/);
   });
 });
