@@ -21,7 +21,7 @@ export async function compileCurrentPackage(timers: Timers, options: CDKBuildOpt
   if (!options.eslint?.disable) {
     await shell([
       compilers.eslint || require.resolve('eslint/bin/eslint'),
-      `--config=${path.resolve(__dirname, '..', 'config', 'eslintrc.json')}`,
+      `--config=${path.resolve(__dirname, '..', 'config', 'eslintrc.yml')}`,
       '.',
       '--ext=.js,.ts',
       '--ignore-path=.gitignore',
