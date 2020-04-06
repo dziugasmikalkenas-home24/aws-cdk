@@ -762,7 +762,7 @@ export class Stack extends Construct implements ITaggable {
     if (parent) {
       const app = this.node.root as App;
       if (!(app instanceof App)) {
-        throw new Error(`expecting root to be an app`);
+        throw new Error('expecting root to be an app');
       }
 
       app._afterStabilize(() => JSON.stringify(this._toCloudFormation()), cfn => {

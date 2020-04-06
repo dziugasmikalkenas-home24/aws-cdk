@@ -181,7 +181,7 @@ export class App extends Construct {
 
         const newResult = req.snapshot();
         if (!newResult) {
-          throw new Error(`snapshot must return a result`);
+          throw new Error('snapshot must return a result');
         }
 
         // if new result is the same as previous result, invoke handler and mark as completed.

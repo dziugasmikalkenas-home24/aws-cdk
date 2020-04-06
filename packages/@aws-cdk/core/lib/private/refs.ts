@@ -1,18 +1,18 @@
 // ----------------------------------------------------
 // CROSS REFERENCES
 // ----------------------------------------------------
-import { CfnElement } from "../cfn-element";
-import { CfnOutput } from "../cfn-output";
-import { CfnParameter } from "../cfn-parameter";
-import { Construct } from "../construct-compat";
-import { Reference } from "../reference";
-import { IResolvable } from "../resolvable";
-import { Stack } from "../stack";
-import { Token } from "../token";
-import { CfnReference } from "./cfn-reference";
+import { CfnElement } from '../cfn-element';
+import { CfnOutput } from '../cfn-output';
+import { CfnParameter } from '../cfn-parameter';
+import { Construct } from '../construct-compat';
+import { Reference } from '../reference';
+import { IResolvable } from '../resolvable';
+import { Stack } from '../stack';
+import { Token } from '../token';
+import { CfnReference } from './cfn-reference';
 import { Intrinsic } from './intrinsic';
-import { findTokens } from "./resolve";
-import { makeUniqueId } from "./uniqueid";
+import { findTokens } from './resolve';
+import { makeUniqueId } from './uniqueid';
 
 /**
  * This is called from the App level to resolve all references defined. Each
@@ -48,14 +48,14 @@ function resolveValue(consumer: Stack, reference: CfnReference): IResolvable {
 
   // unsupported: stacks from different apps
   if (producer.node.root !== consumer.node.root) {
-    throw new Error(`Cannot reference across apps. Consuming and producing stacks must be defined within the same CDK app.`);
+    throw new Error('Cannot reference across apps. Consuming and producing stacks must be defined within the same CDK app.');
   }
 
   // unsupported: stacks are not in the same environment
   if (producer.environment !== consumer.environment) {
     throw new Error(
       `Stack "${consumer.node.path}" cannot consume a cross reference from stack "${producer.node.path}". ` +
-      `Cross stack references are only supported for stacks deployed to the same environment or between nested stacks and their parent stack`);
+      'Cross stack references are only supported for stacks deployed to the same environment or between nested stacks and their parent stack');
   }
 
   // ----------------------------------------------------------------------
@@ -226,7 +226,7 @@ function createNestedStackParameter(consumer: Stack, reference: Reference) {
 
     // Ugly little hack until we move NestedStack to this module.
     if (!('setParameter' in consumer)) {
-      throw new Error(`assertion failed: nested stack should have a "setParameter" method`);
+      throw new Error('assertion failed: nested stack should have a "setParameter" method');
     }
 
     (consumer as any).setParameter(param.logicalId, Token.asString(reference));

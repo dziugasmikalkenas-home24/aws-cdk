@@ -117,7 +117,7 @@ export class CfnReference extends Reference {
 
   public assignValueForStack(stack: Stack, value: IResolvable) {
     if (stack === this.targetStack) {
-      throw new Error(`cannot assign a value for the same stack`);
+      throw new Error('cannot assign a value for the same stack');
     }
 
     if (this.hasValueForStack(stack)) {
