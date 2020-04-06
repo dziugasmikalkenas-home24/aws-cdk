@@ -1,7 +1,7 @@
 import { expect, haveResourceLike } from '@aws-cdk/assert';
 import * as codebuild from '@aws-cdk/aws-codebuild';
 import * as codepipeline from '@aws-cdk/aws-codepipeline';
-import { Stack } from '@aws-cdk/core';
+import { App, Stack } from '@aws-cdk/core';
 import { Test } from 'nodeunit';
 import * as cpactions from '../../lib';
 
@@ -10,7 +10,8 @@ import * as cpactions from '../../lib';
 export = {
   'BitBucket source Action': {
     'produces the correct configuration when added to a pipeline'(test: Test) {
-      const stack = new Stack();
+      const app = new App();
+      const stack = new Stack(app, 'stack');
 
       const sourceOutput = new codepipeline.Artifact();
       new codepipeline.Pipeline(stack, 'Pipeline', {

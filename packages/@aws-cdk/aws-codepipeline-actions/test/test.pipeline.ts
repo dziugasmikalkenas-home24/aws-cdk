@@ -67,7 +67,8 @@ export = {
   },
 
   'pipeline with GitHub source with poll trigger'(test: Test) {
-    const stack = new Stack();
+    const app = new App();
+    const stack = new Stack(app, 'stack');
 
     const secret = new CfnParameter(stack, 'GitHubToken', { type: 'String', default: 'my-token' });
 
@@ -126,7 +127,8 @@ export = {
   },
 
   'pipeline with GitHub source without triggers'(test: Test) {
-    const stack = new Stack();
+    const app = new App();
+    const stack = new Stack(app, 'stack');
 
     const secret = new CfnParameter(stack, 'GitHubToken', { type: 'String', default: 'my-token' });
 
@@ -185,7 +187,8 @@ export = {
   },
 
   'github action uses ThirdParty owner'(test: Test) {
-    const stack = new Stack();
+    const app = new App();
+    const stack = new Stack(app, 'stack');
 
     const secret = new CfnParameter(stack, 'GitHubToken', { type: 'String', default: 'my-token' });
 
@@ -281,7 +284,8 @@ export = {
   },
 
   'onStateChange'(test: Test) {
-    const stack = new Stack();
+    const app = new App();
+    const stack = new Stack(app, 'stack');
 
     const topic = new sns.Topic(stack, 'Topic');
 
@@ -374,7 +378,8 @@ export = {
   'PipelineProject': {
     'with a custom Project Name': {
       'sets the source and artifacts to CodePipeline'(test: Test) {
-        const stack = new Stack();
+        const app = new App();
+        const stack = new Stack(app, 'stack');
 
         new codebuild.PipelineProject(stack, 'MyProject', {
           projectName: 'MyProject',
@@ -408,7 +413,8 @@ export = {
   },
 
   'Lambda PipelineInvokeAction can be used to invoke Lambda functions from a CodePipeline'(test: Test) {
-    const stack = new Stack();
+    const app = new App();
+    const stack = new Stack(app, 'stack');
 
     const lambdaFun = new lambda.Function(stack, 'Function', {
       code: new lambda.InlineCode('bla'),
@@ -660,7 +666,8 @@ export = {
     },
 
     'allows specifying only one of artifactBucket and crossRegionReplicationBuckets'(test: Test) {
-      const stack = new Stack();
+      const app = new App();
+      const stack = new Stack(app, 'stack');
 
       test.throws(() => {
         new codepipeline.Pipeline(stack, 'Pipeline', {
@@ -676,7 +683,8 @@ export = {
     'does not create a new artifact Bucket if one was provided in the cross-region Buckets for the Pipeline region'(test: Test) {
       const pipelineRegion = 'us-west-2';
 
-      const stack = new Stack(undefined, undefined, {
+      const app = new App();
+      const stack = new Stack(app, 'stack', {
         env: {
           region: pipelineRegion,
         },

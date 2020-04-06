@@ -70,7 +70,8 @@ export = {
     },
 
     'can be backed by an imported project'(test: Test) {
-      const stack = new Stack();
+      const app = new App();
+      const stack = new Stack(app, 'stack');
 
       const codeBuildProject = codebuild.PipelineProject.fromProjectName(stack, 'CodeBuild',
         'codeBuildProjectNameInAnotherAccount');
@@ -125,7 +126,8 @@ export = {
     },
 
     'exposes variables for other actions to consume'(test: Test) {
-      const stack = new Stack();
+      const app = new App();
+      const stack = new Stack(app, 'stack');
 
       const sourceOutput = new codepipeline.Artifact();
       const codeBuildAction = new cpactions.CodeBuildAction({

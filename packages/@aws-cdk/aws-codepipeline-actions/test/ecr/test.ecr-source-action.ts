@@ -2,7 +2,7 @@ import { expect, haveResourceLike } from '@aws-cdk/assert';
 import * as codebuild from '@aws-cdk/aws-codebuild';
 import * as codepipeline from '@aws-cdk/aws-codepipeline';
 import * as ecr from '@aws-cdk/aws-ecr';
-import { Stack } from '@aws-cdk/core';
+import { App, Stack } from '@aws-cdk/core';
 import { Test } from 'nodeunit';
 import * as cpactions from '../../lib';
 
@@ -11,7 +11,8 @@ import * as cpactions from '../../lib';
 export = {
   'ECR source Action': {
     'exposes variables for other actions to consume'(test: Test) {
-      const stack = new Stack();
+      const app = new App();
+      const stack = new Stack(app, 'stack');
 
       const sourceOutput = new codepipeline.Artifact();
       const ecrSourceAction = new cpactions.EcrSourceAction({

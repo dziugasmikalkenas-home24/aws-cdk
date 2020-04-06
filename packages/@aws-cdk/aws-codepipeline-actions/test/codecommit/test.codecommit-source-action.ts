@@ -2,7 +2,7 @@ import { countResources, expect, haveResourceLike, not } from '@aws-cdk/assert';
 import * as codebuild from '@aws-cdk/aws-codebuild';
 import * as codecommit from '@aws-cdk/aws-codecommit';
 import * as codepipeline from '@aws-cdk/aws-codepipeline';
-import { Stack } from '@aws-cdk/core';
+import { App, Stack } from '@aws-cdk/core';
 import { Test } from 'nodeunit';
 import * as cpactions from '../../lib';
 
@@ -11,7 +11,8 @@ import * as cpactions from '../../lib';
 export = {
   'CodeCommit Source Action': {
     'by default does not poll for source changes and uses Events'(test: Test) {
-      const stack = new Stack();
+      const app = new App();
+      const stack = new Stack(app, 'stack');
 
       minimalPipeline(stack, undefined);
 
@@ -36,7 +37,8 @@ export = {
     },
 
     'does not poll for source changes and uses Events for CodeCommitTrigger.EVENTS'(test: Test) {
-      const stack = new Stack();
+      const app = new App();
+      const stack = new Stack(app, 'stack');
 
       minimalPipeline(stack, cpactions.CodeCommitTrigger.EVENTS);
 
@@ -61,7 +63,8 @@ export = {
     },
 
     'polls for source changes and does not use Events for CodeCommitTrigger.POLL'(test: Test) {
-      const stack = new Stack();
+      const app = new App();
+      const stack = new Stack(app, 'stack');
 
       minimalPipeline(stack, cpactions.CodeCommitTrigger.POLL);
 
@@ -86,7 +89,8 @@ export = {
     },
 
     'does not poll for source changes and does not use Events for CodeCommitTrigger.NONE'(test: Test) {
-      const stack = new Stack();
+      const app = new App();
+      const stack = new Stack(app, 'stack');
 
       minimalPipeline(stack, cpactions.CodeCommitTrigger.NONE);
 
@@ -111,7 +115,8 @@ export = {
     },
 
     'exposes variables for other actions to consume'(test: Test) {
-      const stack = new Stack();
+      const app = new App();
+      const stack = new Stack(app, 'stack');
 
       const sourceOutput = new codepipeline.Artifact();
       const codeCommitSourceAction = new cpactions.CodeCommitSourceAction({

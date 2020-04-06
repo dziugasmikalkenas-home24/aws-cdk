@@ -1,7 +1,7 @@
 import { expect, haveResourceLike, SynthUtils } from '@aws-cdk/assert';
 import * as codebuild from '@aws-cdk/aws-codebuild';
 import * as codepipeline from '@aws-cdk/aws-codepipeline';
-import { SecretValue, Stack } from '@aws-cdk/core';
+import { App, SecretValue, Stack } from '@aws-cdk/core';
 import { Test } from 'nodeunit';
 import * as cpactions from '../../lib';
 
@@ -10,7 +10,8 @@ import * as cpactions from '../../lib';
 export = {
   'GitHub source Action': {
     'exposes variables for other actions to consume'(test: Test) {
-      const stack = new Stack();
+      const app = new App();
+      const stack = new Stack(app, 'stack');
 
       const sourceOutput = new codepipeline.Artifact();
       const gitHubSourceAction = new cpactions.GitHubSourceAction({
@@ -65,7 +66,8 @@ export = {
     },
 
     'always renders the customer-supplied namespace, even if none of the variables are used'(test: Test) {
-      const stack = new Stack();
+      const app = new App();
+      const stack = new Stack(app, 'stack');
 
       const sourceOutput = new codepipeline.Artifact();
       new codepipeline.Pipeline(stack, 'Pipeline', {
@@ -116,7 +118,8 @@ export = {
     },
 
     'fails if a variable from an action without a namespace set that is not part of a pipeline is referenced'(test: Test) {
-      const stack = new Stack();
+      const app = new App();
+      const stack = new Stack(app, 'stack');
 
       const unusedSourceAction = new cpactions.GitHubSourceAction({
         actionName: 'Source2',
@@ -162,7 +165,8 @@ export = {
     },
 
     'fails if a variable from an action with a namespace set that is not part of a pipeline is referenced'(test: Test) {
-      const stack = new Stack();
+      const app = new App();
+      const stack = new Stack(app, 'stack');
 
       const unusedSourceAction = new cpactions.GitHubSourceAction({
         actionName: 'Source2',

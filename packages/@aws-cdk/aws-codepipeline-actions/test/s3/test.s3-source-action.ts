@@ -2,7 +2,7 @@ import { countResources, expect, haveResourceLike, not } from '@aws-cdk/assert';
 import * as codebuild from '@aws-cdk/aws-codebuild';
 import * as codepipeline from '@aws-cdk/aws-codepipeline';
 import * as s3 from '@aws-cdk/aws-s3';
-import { Stack } from '@aws-cdk/core';
+import { App, Stack } from '@aws-cdk/core';
 import { Test } from 'nodeunit';
 import * as cpactions from '../../lib';
 
@@ -11,7 +11,8 @@ import * as cpactions from '../../lib';
 export = {
   'S3 Source Action': {
     'by default polls for source changes and does not use Events'(test: Test) {
-      const stack = new Stack();
+      const app = new App();
+      const stack = new Stack(app, 'stack');
 
       minimalPipeline(stack, undefined);
 
@@ -35,7 +36,8 @@ export = {
     },
 
     'does not poll for source changes and uses Events for S3Trigger.EVENTS'(test: Test) {
-      const stack = new Stack();
+      const app = new App();
+      const stack = new Stack(app, 'stack');
 
       minimalPipeline(stack, { trigger: cpactions.S3Trigger.EVENTS });
 
@@ -60,7 +62,8 @@ export = {
     },
 
     'polls for source changes and does not use Events for S3Trigger.POLL'(test: Test) {
-      const stack = new Stack();
+      const app = new App();
+      const stack = new Stack(app, 'stack');
 
       minimalPipeline(stack, { trigger: cpactions.S3Trigger.POLL });
 
@@ -85,7 +88,8 @@ export = {
     },
 
     'does not poll for source changes and does not use Events for S3Trigger.NONE'(test: Test) {
-      const stack = new Stack();
+      const app = new App();
+      const stack = new Stack(app, 'stack');
 
       minimalPipeline(stack, { trigger: cpactions.S3Trigger.NONE });
 
@@ -177,7 +181,8 @@ export = {
     },
 
     'exposes variables for other actions to consume'(test: Test) {
-      const stack = new Stack();
+      const app = new App();
+      const stack = new Stack(app, 'stack');
 
       const sourceOutput = new codepipeline.Artifact();
       const s3SourceAction = new cpactions.S3SourceAction({

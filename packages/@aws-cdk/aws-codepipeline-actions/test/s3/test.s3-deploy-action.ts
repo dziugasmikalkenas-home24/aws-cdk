@@ -1,7 +1,7 @@
 import { expect, haveResourceLike } from '@aws-cdk/assert';
 import * as codepipeline from '@aws-cdk/aws-codepipeline';
 import * as s3 from '@aws-cdk/aws-s3';
-import { Duration, SecretValue, Stack } from '@aws-cdk/core';
+import { App, Duration, SecretValue, Stack } from '@aws-cdk/core';
 import { Test } from 'nodeunit';
 import * as cpactions from '../../lib';
 
@@ -10,7 +10,8 @@ import * as cpactions from '../../lib';
 export = {
   'S3 Deploy Action': {
     'by default extract artifacts'(test: Test) {
-      const stack = new Stack();
+      const app = new App();
+      const stack = new Stack(app, 'stack');
       minimalPipeline(stack);
 
       expect(stack).to(haveResourceLike('AWS::CodePipeline::Pipeline', {
@@ -49,7 +50,8 @@ export = {
     },
 
     'grant the pipeline correct access to the target bucket'(test: Test) {
-      const stack = new Stack();
+      const app = new App();
+      const stack = new Stack(app, 'stack');
       minimalPipeline(stack);
 
       expect(stack).to(haveResourceLike('AWS::IAM::Policy', {
@@ -79,7 +81,8 @@ export = {
     },
 
     'kebab-case CannedACL value'(test: Test) {
-      const stack = new Stack();
+      const app = new App();
+      const stack = new Stack(app, 'stack');
       minimalPipeline(stack, {
         accessControl: s3.BucketAccessControl.PUBLIC_READ_WRITE
       });
@@ -103,7 +106,8 @@ export = {
     },
 
     'allow customizing cache-control'(test: Test) {
-      const stack = new Stack();
+      const app = new App();
+      const stack = new Stack(app, 'stack');
       minimalPipeline(stack, {
         cacheControl: [
           cpactions.CacheControl.setPublic(),
@@ -130,7 +134,8 @@ export = {
     },
 
     'allow customizing objectKey (deployment path on S3)'(test: Test) {
-      const stack = new Stack();
+      const app = new App();
+      const stack = new Stack(app, 'stack');
       minimalPipeline(stack, {
         objectKey: '/a/b/c'
       });

@@ -3,7 +3,7 @@ import * as codepipeline from '@aws-cdk/aws-codepipeline';
 import * as lambda from '@aws-cdk/aws-lambda';
 import * as s3 from '@aws-cdk/aws-s3';
 import * as sns from '@aws-cdk/aws-sns';
-import { Aws, Lazy, SecretValue, Stack, Token } from '@aws-cdk/core';
+import { App, Aws, Lazy, SecretValue, Stack, Token } from '@aws-cdk/core';
 import { Test } from 'nodeunit';
 import * as cpactions from '../../lib';
 
@@ -304,7 +304,8 @@ interface HelperProps {
 }
 
 function stackIncludingLambdaInvokeCodePipeline(props: HelperProps) {
-  const stack = new Stack();
+  const app = new App();
+  const stack = new Stack(app, 'stack');
 
   new codepipeline.Pipeline(stack, 'Pipeline', {
     stages: [
