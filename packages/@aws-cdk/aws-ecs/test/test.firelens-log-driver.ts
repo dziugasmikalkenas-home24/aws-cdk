@@ -9,7 +9,8 @@ const image = ecs.ContainerImage.fromRegistry('test-image');
 
 export = {
   'setUp'(cb: () => void) {
-    stack = new cdk.Stack();
+    const app = new cdk.App();
+    stack = new cdk.Stack(app, 'stack');
     td = new ecs.Ec2TaskDefinition(stack, 'TaskDefinition');
 
     cb();

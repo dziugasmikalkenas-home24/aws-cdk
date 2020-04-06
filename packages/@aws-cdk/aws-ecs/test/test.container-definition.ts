@@ -693,7 +693,8 @@ export = {
 
   'can add secret environment variables to the container definition'(test: Test) {
     // GIVEN
-    const stack = new cdk.Stack();
+    const app = new cdk.App();
+    const stack = new cdk.Stack(app, 'stack');
     const taskDefinition = new ecs.Ec2TaskDefinition(stack, 'TaskDef');
 
     const secret = new secretsmanager.Secret(stack, 'Secret');
