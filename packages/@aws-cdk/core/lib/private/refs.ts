@@ -13,29 +13,31 @@ import { findTokens } from "./resolve";
 import { makeUniqueId } from "./uniqueid";
 
 export function prepareReferences(root: Construct) {
-  const refs = findAllReferences(root);
+  const edges = findAllReferences(root);
 
-  for (const ref of refs) {
-    const consumer = Stack.of(ref.consumer);
+  for (const { source, value } of edges) {
+    const consumer = Stack.of(source);
 
-    // skip if this reference already has a value for stack
-    if (ref.reference.hasValueForStack(consumer)) {
+    // skip if we already have a value for this consumer
+    if (value.hasValueForStack(consumer)) {
       continue;
     }
 
-    // if the reference has already been assigned a value for the consuming stack, carry on.
-    const value = getValueForReference(ref);
-    ref.reference.assignValueForStack(consumer, value);
+    // resolve the value in the context of the consumer.
+    const resolved = resolveValue(consumer, value);
+    value.assignValueForStack(consumer, resolved);
   }
 }
 
-function getValueForReference(ref: Edge): IResolvable {
-  const consumer = Stack.of(ref.consumer);
-  const producer = Stack.of(ref.reference.target);
-  const reference = ref.reference;
+/**
+ * Resolves the value for `reference` in the context of `consumer`.
+ */
+function resolveValue(consumer: Stack, reference: CfnReference): IResolvable {
+  const producer = Stack.of(reference.target);
 
+  // produce and consumer stacks are the same, we can just return the value itself.
   if (producer === consumer) {
-    return ref.reference;
+    return reference;
   }
 
   // unsupported: stacks from different apps
@@ -56,7 +58,7 @@ function getValueForReference(ref: Edge): IResolvable {
   // a CloudFormation parameter on the nested stack and continue recursively
   if (isParent(producer, consumer)) {
     const inputValue = createNestedStackParameter(consumer, reference);
-    return getValueForReference({ consumer: ref.consumer, reference: inputValue });
+    return resolveValue(consumer, inputValue);
   }
 
   // if the producer is nested, we always publish the value through an output
@@ -67,7 +69,7 @@ function getValueForReference(ref: Edge): IResolvable {
   // value is basically available in the parent.
   if (producer.nested) {
     const outputValue = createNestedStackOutput(producer, reference);
-    return getValueForReference({ consumer: ref.consumer, reference: outputValue });
+    return resolveValue(consumer, outputValue);
   }
 
   // add a dependency on the producing stack - it has to be deployed before this
@@ -81,35 +83,34 @@ function getValueForReference(ref: Edge): IResolvable {
   return exportAndGetImportValue(reference);
 }
 
-interface Edge {
-  readonly consumer: CfnElement;
-  readonly reference: CfnReference;
-}
-
 /**
- * Returns all the tokens used within the scope of the current stack.
+ * Finds all the CloudFormation references in a construct tree.
  */
 function findAllReferences(root: Construct) {
-  const result = new Array<Edge>();
-  for (const source of root.node.findAll()) {
-    if (!CfnElement.isCfnElement(source)) {
+  const result = new Array<{ source: CfnElement, value: CfnReference }>();
+  for (const consumer of root.node.findAll()) {
+
+    // include only CfnElements (i.e. resources)
+    if (!CfnElement.isCfnElement(consumer)) {
       continue;
     }
 
     try {
-      const tokens = findTokens(source, () => source._toCloudFormation());
+      const tokens = findTokens(consumer, () => consumer._toCloudFormation());
+
+      // iterate over all the tokens (e.g. intrinsic functions, lazies, etc) that
+      // were found in the cloudformation representation of this resource.
       for (const token of tokens) {
-        if (CfnReference.isCfnReference(token)) {
 
-          if (!(token.target instanceof Construct)) {
-            throw new Error(`objects that implement IConstruct must extend "Construct"`);
-          }
-
-          result.push({
-            consumer: source,
-            reference: token
-          });
+        // include only CfnReferences (i.e. "Ref" and "Fn::GetAtt")
+        if (!CfnReference.isCfnReference(token)) {
+          continue;
         }
+
+        result.push({
+          source: consumer,
+          value: token
+        });
       }
     }  catch (e) {
       // Note: it might be that the properties of the CFN object aren't valid.
@@ -131,6 +132,10 @@ function findAllReferences(root: Construct) {
 
   return result;
 }
+
+// ------------------------------------------------------------------------------------------------
+// export/import
+// ------------------------------------------------------------------------------------------------
 
 /**
  * Imports a value from another stack by creating an "Output" with an "ExportName"
@@ -182,10 +187,14 @@ function generateExportName(stackExports: Construct, id: string) {
   return exportName;
 }
 
-//////////////////////////////////////
-// NESTED STACKS
-//////////////////////////////////////
+// ------------------------------------------------------------------------------------------------
+// nested stacks
+// ------------------------------------------------------------------------------------------------
 
+/**
+ * Adds a CloudFormation parameter to a nested stack and assigns it with the
+ * value of the reference.
+ */
 function createNestedStackParameter(consumer: Stack, reference: Reference) {
   // we call "this.resolve" to ensure that tokens do not creep in (for example, if the reference display name includes tokens)
   const paramId = consumer.resolve(`reference-to-${reference.target.node.uniqueId}.${reference.displayName}`);
@@ -204,6 +213,10 @@ function createNestedStackParameter(consumer: Stack, reference: Reference) {
   return param.value as CfnReference;
 }
 
+/**
+ * Adds a CloudFormation output to a nested stack and returns an "Fn::GetAtt"
+ * intrinsic that can be used to reference this output in the parent stack.
+ */
 function createNestedStackOutput(producer: Stack, reference: Reference): CfnReference {
   const outputId = `${reference.target.node.uniqueId}${reference.displayName}`;
   let output = producer.node.tryFindChild(outputId) as CfnOutput;
@@ -220,7 +233,10 @@ function createNestedStackOutput(producer: Stack, reference: Reference): CfnRefe
 
 /**
  * @returns true if this stack is a direct or indirect parent of the nested
- * stack `nested`. If `nested` is a top-level stack, returns false.
+ * stack `nested`.
+ *
+ * If `child` is not a nested stack, always returns `false` because it can't
+ * have a parent, dah.
  */
 export function isParent(parent: Stack, child: Stack): boolean {
   // if "nested" is not a nested stack, then by definition we cannot be its parent
