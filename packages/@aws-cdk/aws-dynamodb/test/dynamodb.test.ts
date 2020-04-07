@@ -1586,7 +1586,8 @@ describe('import', () => {
 describe('global', () => {
   test('create replicas', () => {
     // GIVEN
-    const stack = new Stack();
+    const app = new App();
+    const stack = new Stack(app, 'stack');
 
     // WHEN
     new Table(stack, 'Table', {
@@ -1606,7 +1607,7 @@ describe('global', () => {
         ServiceToken: {
           'Fn::GetAtt': [
             'awscdkawsdynamodbReplicaProviderNestedStackawscdkawsdynamodbReplicaProviderNestedStackResource18E3F12D',
-            'Outputs.awscdkawsdynamodbReplicaProviderframeworkonEventF9504691Arn'
+            'Outputs.stackawscdkawsdynamodbReplicaProviderframeworkonEventCC7500FEArn'
           ]
         },
         TableName: {
@@ -1622,7 +1623,7 @@ describe('global', () => {
         ServiceToken: {
           'Fn::GetAtt': [
             'awscdkawsdynamodbReplicaProviderNestedStackawscdkawsdynamodbReplicaProviderNestedStackResource18E3F12D',
-            'Outputs.awscdkawsdynamodbReplicaProviderframeworkonEventF9504691Arn'
+            'Outputs.stackawscdkawsdynamodbReplicaProviderframeworkonEventCC7500FEArn'
           ]
         },
         TableName: {
